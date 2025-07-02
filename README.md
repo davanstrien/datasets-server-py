@@ -42,17 +42,17 @@ from datasets_server import DatasetsServerClient
 client = DatasetsServerClient()
 
 # Check dataset validity
-validity = client.is_valid("squad")
+validity = client.is_valid("stanfordnlp/imdb")
 if validity.preview:
     # Preview first rows
-    rows = client.preview("squad")
+    rows = client.preview("stanfordnlp/imdb")
     print(f"Dataset has {len(rows.rows)} preview rows")
     
 # Search within a dataset
 if validity.search:
     results = client.search(
-        dataset="squad",
-        query="artificial intelligence",
+        dataset="stanfordnlp/imdb",
+        query="amazing movie",
         config="plain_text",
         split="train",
         length=5
@@ -69,7 +69,7 @@ from datasets_server import AsyncDatasetsServerClient
 async def explore_datasets():
     async with AsyncDatasetsServerClient() as client:
         # Check multiple datasets concurrently
-        datasets = ["squad", "glue", "mnist"]
+        datasets = ["SetFit/ag_news", "stanfordnlp/imdb", "davanstrien/haiku_dpo"]
         tasks = [client.is_valid(ds) for ds in datasets]
         validities = await asyncio.gather(*tasks)
         
@@ -129,33 +129,33 @@ from datasets_server import DatasetsServerClient
 client = DatasetsServerClient()
 
 # Get basic information
-info = client.get_info("squad")
+info = client.get_info("SetFit/ag_news")
 print(f"Description: {info.dataset_info.get('description', 'N/A')}")
 
 # List available splits
-splits = client.list_splits("squad")
+splits = client.list_splits("SetFit/ag_news")
 for split in splits:
     print(f"Config: {split.config}, Split: {split.split}")
 
 # Get dataset statistics
-stats = client.get_statistics("squad", config="plain_text", split="train")
+stats = client.get_statistics("SetFit/ag_news", config="default", split="train")
 print(f"Number of examples: {stats.num_examples:,}")
 ```
 
 ### Filter Dataset Rows
 
 ```python
-# Filter questions longer than 50 characters
+# Filter for positive reviews (label = 1)
 filtered = client.filter(
-    dataset="squad",
+    dataset="stanfordnlp/imdb",
     config="plain_text",
-    split="validation",
-    where='LENGTH("question") > 50',
+    split="train",
+    where='"label" = 1',
     length=10
 )
 
 for row in filtered.rows:
-    print(row["row"]["question"])
+    print(f"Label: {row['row']['label']}, Text preview: {row['row']['text'][:100]}...")
 ```
 
 ### Sample Random Rows
@@ -163,7 +163,7 @@ for row in filtered.rows:
 ```python
 # Get a random sample of rows
 sample = client.sample_rows(
-    dataset="imdb",
+    dataset="stanfordnlp/imdb",
     config="plain_text",
     split="train",
     n_samples=10,
@@ -194,7 +194,7 @@ async def analyze_datasets(dataset_list):
             else:
                 print(f"{dataset}: {result.dataset_info.get('num_rows', 'Unknown')} rows")
 
-asyncio.run(analyze_datasets(["squad", "glue", "mnist"]))
+asyncio.run(analyze_datasets(["SetFit/ag_news", "stanfordnlp/imdb", "librarian-bots/dataset_cards_with_metadata"]))
 ```
 
 ## Error Handling
