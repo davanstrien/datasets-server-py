@@ -110,7 +110,7 @@ All methods are available in both sync and async versions:
 - `preview(dataset, config=None, split=None)` - Preview first 100 rows
 - `get_rows(dataset, config, split, offset=0, length=100)` - Get rows with pagination
 - `iter_rows(dataset, config, split, batch_size=100)` - Iterate through all rows
-- `sample_rows(dataset, config, split, n_samples, seed=None)` - Get random sample of rows
+- `sample_rows(dataset, config, split, n_samples, seed=None, max_requests=None)` - Get random sample of rows
 
 #### Search and Filter
 - `search(dataset, query, config, split, offset=0, length=100)` - Search text in dataset
@@ -174,6 +174,18 @@ for row in sample.rows:
     text_preview = row["row"]["text"][:100] + "..."
     label = "positive" if row["row"]["label"] == 1 else "negative"
     print(f"{label}: {text_preview}")
+
+# API-efficient sampling with max_requests
+# Limits API calls for large datasets
+efficient_sample = client.sample_rows(
+    dataset="stanfordnlp/imdb",
+    config="plain_text",
+    split="train",
+    n_samples=50,
+    seed=42,
+    max_requests=5  # Use at most 5 API calls
+)
+# Note: max_requests trades randomness for API efficiency
 ```
 
 ### Concurrent Operations with Async

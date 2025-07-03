@@ -343,6 +343,7 @@ class DatasetsServerClient(BaseClient):
         split: str,
         n_samples: int,
         seed: Optional[int] = None,
+        max_requests: Optional[int] = None,
     ) -> DatasetRows:
         """Get a random sample of rows from a dataset.
 
@@ -352,6 +353,9 @@ class DatasetsServerClient(BaseClient):
             split: The dataset split name.
             n_samples: Number of rows to sample.
             seed: Optional random seed for reproducibility.
+            max_requests: Optional maximum number of API requests. If specified,
+                sampling will be less random but more API-efficient. Default None
+                uses true random sampling.
 
         Returns:
             DatasetRows object with sampled rows.
@@ -399,7 +403,13 @@ class DatasetsServerClient(BaseClient):
         if seed is not None:
             random.seed(seed)
 
-        # Generate unique random indices
+        # If max_requests is specified, use request-limited sampling
+        if max_requests is not None and max_requests > 0:
+            return self._sample_rows_limited(
+                dataset, config, split, n_samples, total_rows, max_requests
+            )
+
+        # Otherwise, use true random sampling
         indices = sorted(random.sample(range(total_rows), n_samples))
 
         # Group indices into batches based on MAX_ROWS_PER_REQUEST
@@ -438,6 +448,77 @@ class DatasetsServerClient(BaseClient):
 
             i = j
 
+        return DatasetRows(
+            features=features or [],
+            rows=sampled_rows,
+            num_rows_total=total_rows,
+            partial=False,
+        )
+
+    def _sample_rows_limited(
+        self,
+        dataset: str,
+        config: str,
+        split: str,
+        n_samples: int,
+        total_rows: int,
+        max_requests: int,
+    ) -> DatasetRows:
+        """Sample rows with limited API requests.
+        
+        This method divides the dataset into segments and fetches rows from
+        random offsets within each segment, then samples from the collected rows.
+        """
+        import random
+        
+        # Calculate segment size and samples per segment
+        segment_size = total_rows // max_requests
+        base_samples_per_segment = n_samples // max_requests
+        extra_samples = n_samples % max_requests
+        
+        all_rows = []
+        features = None
+        
+        for i in range(max_requests):
+            # Calculate segment boundaries
+            segment_start = i * segment_size
+            if i == max_requests - 1:
+                # Last segment includes any remaining rows
+                segment_end = total_rows
+            else:
+                segment_end = (i + 1) * segment_size
+            
+            # Calculate samples for this segment
+            samples_from_segment = base_samples_per_segment
+            if i < extra_samples:
+                samples_from_segment += 1
+            
+            if samples_from_segment == 0:
+                continue
+            
+            # Pick random offset within segment
+            max_offset = segment_end - min(self.MAX_ROWS_PER_REQUEST, segment_end - segment_start)
+            offset = random.randint(segment_start, max(segment_start, max_offset))
+            
+            # Fetch rows from this offset
+            length = min(self.MAX_ROWS_PER_REQUEST, segment_end - offset)
+            batch = self.get_rows(dataset, config, split, offset=offset, length=length)
+            
+            if features is None:
+                features = batch.features
+            
+            # Collect all rows from this batch
+            all_rows.extend(batch.rows)
+        
+        # Sample from collected rows
+        if len(all_rows) < n_samples:
+            # If we couldn't fetch enough rows, return what we have
+            sampled_rows = all_rows
+        else:
+            # Sample n_samples from all collected rows
+            sampled_indices = random.sample(range(len(all_rows)), n_samples)
+            sampled_rows = [all_rows[i] for i in sampled_indices]
+        
         return DatasetRows(
             features=features or [],
             rows=sampled_rows,

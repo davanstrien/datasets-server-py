@@ -539,3 +539,148 @@ class TestDatasetsServerClient:
 
         assert len(result.rows) == 5
         assert result.num_rows_total == 1000
+
+
+    @patch("datasets_server.client.requests.Session")
+    def test_sample_rows_with_max_requests(self, mock_session_class):
+        """Test sample_rows with max_requests parameter."""
+        # Mock info response
+        mock_info_response = Mock()
+        mock_info_response.status_code = 200
+        mock_info_response.json.return_value = {
+            "dataset_info": {
+                "splits": {
+                    "train": {"name": "train", "num_examples": 10000}
+                }
+            },
+            "pending": [],
+            "failed": [],
+            "partial": False,
+        }
+
+        # Mock rows responses for limited requests
+        def create_rows_response(offset, length):
+            response = Mock()
+            response.status_code = 200
+            response.json.return_value = {
+                "features": [{"name": "text", "type": "string"}],
+                "rows": [{"row": {"text": f"Row {i}"}} for i in range(offset, min(offset + length, 10000))],
+                "num_rows_total": 10000,
+            }
+            return response
+
+        # Mock session
+        mock_session = Mock()
+        # With max_requests=2, we expect 2 API calls for get_rows
+        mock_session.request.side_effect = [
+            mock_info_response,
+            create_rows_response(0, 100),    # First segment
+            create_rows_response(5000, 100), # Second segment
+        ]
+        mock_session_class.return_value = mock_session
+
+        client = DatasetsServerClient()
+        result = client.sample_rows("dataset", "config", "train", n_samples=10, seed=42, max_requests=2)
+
+        # Should have made exactly 3 API calls (1 info + 2 get_rows)
+        assert mock_session.request.call_count == 3
+        assert len(result.rows) == 10
+        assert result.num_rows_total == 10000
+
+    @patch("datasets_server.client.requests.Session")
+    def test_sample_rows_max_requests_one(self, mock_session_class):
+        """Test sample_rows with max_requests=1 (single API call)."""
+        # Mock info response
+        mock_info_response = Mock()
+        mock_info_response.status_code = 200
+        mock_info_response.json.return_value = {
+            "dataset_info": {
+                "splits": {
+                    "train": {"name": "train", "num_examples": 50000}
+                }
+            },
+            "pending": [],
+            "failed": [],
+            "partial": False,
+        }
+
+        # Mock single rows response
+        def create_rows_response(offset, length):
+            response = Mock()
+            response.status_code = 200
+            response.json.return_value = {
+                "features": [{"name": "text", "type": "string"}, {"name": "label", "type": "int"}],
+                "rows": [
+                    {"row": {"text": f"Row {i}", "label": i % 2}} 
+                    for i in range(offset, min(offset + length, 50000))
+                ],
+                "num_rows_total": 50000,
+            }
+            return response
+
+        # Mock session
+        mock_session = Mock()
+        mock_session.request.side_effect = [
+            mock_info_response,
+            create_rows_response(15000, 100),  # Single request somewhere in the middle
+        ]
+        mock_session_class.return_value = mock_session
+
+        client = DatasetsServerClient()
+        result = client.sample_rows("dataset", "config", "train", n_samples=5, seed=123, max_requests=1)
+
+        # Should have made exactly 2 API calls (1 info + 1 get_rows)
+        assert mock_session.request.call_count == 2
+        assert len(result.rows) == 5
+        assert result.num_rows_total == 50000
+        # All samples should come from the same batch
+        row_nums = [int(row["row"]["text"].split()[1]) for row in result.rows]
+        assert all(15000 <= num < 15100 for num in row_nums)
+
+    @patch("datasets_server.client.requests.Session")
+    def test_sample_rows_max_requests_exceeds_samples(self, mock_session_class):
+        """Test sample_rows when max_requests > n_samples."""
+        # Mock info response
+        mock_info_response = Mock()
+        mock_info_response.status_code = 200
+        mock_info_response.json.return_value = {
+            "dataset_info": {
+                "splits": {
+                    "train": {"name": "train", "num_examples": 1000}
+                }
+            },
+            "pending": [],
+            "failed": [],
+            "partial": False,
+        }
+
+        # Mock rows responses
+        def create_rows_response(offset, length):
+            response = Mock()
+            response.status_code = 200
+            response.json.return_value = {
+                "features": [{"name": "text", "type": "string"}],
+                "rows": [{"row": {"text": f"Row {i}"}} for i in range(offset, min(offset + length, 1000))],
+                "num_rows_total": 1000,
+            }
+            return response
+
+        # Mock session
+        mock_session = Mock()
+        # With max_requests=5 but only n_samples=3, we should still get good distribution
+        mock_session.request.side_effect = [
+            mock_info_response,
+            create_rows_response(0, 100),    # Segment 1
+            create_rows_response(200, 100),  # Segment 2
+            create_rows_response(400, 100),  # Segment 3
+            # Segments 4 and 5 won't be called since we only need 3 samples
+        ]
+        mock_session_class.return_value = mock_session
+
+        client = DatasetsServerClient()
+        result = client.sample_rows("dataset", "config", "train", n_samples=3, seed=42, max_requests=5)
+
+        # Should have made 4 API calls (1 info + 3 get_rows for first 3 segments)
+        assert mock_session.request.call_count == 4
+        assert len(result.rows) == 3
+        assert result.num_rows_total == 1000

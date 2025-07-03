@@ -465,3 +465,129 @@ class TestAsyncDatasetsServerClient:
 
             assert len(result.rows) == 5
             assert result.num_rows_total == 1000
+
+
+    @pytest.mark.asyncio
+    async def test_sample_rows_with_max_requests(self):
+        """Test sample_rows with max_requests parameter."""
+        with aioresponses() as m:
+            # Mock info endpoint
+            m.get(
+                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
+                payload={
+                    "dataset_info": {
+                        "splits": {
+                            "train": {"name": "train", "num_examples": 10000}
+                        }
+                    },
+                    "pending": [],
+                    "failed": [],
+                    "partial": False,
+                },
+            )
+
+            # Mock rows calls for limited requests
+            # With max_requests=2, dataset is divided into 2 segments
+            # We don't know the exact offsets due to randomness, so mock with regex
+            import re
+            
+            # First segment (0-4999)
+            m.get(
+                re.compile(r"https://datasets-server\.huggingface\.co/rows\?.*offset=\d+.*"),
+                payload={
+                    "features": [{"name": "text", "type": "string"}],
+                    "rows": [{"row": {"text": f"Row {i}"}} for i in range(100)],
+                    "num_rows_total": 10000,
+                },
+                repeat=True,
+            )
+
+            async with AsyncDatasetsServerClient() as client:
+                result = await client.sample_rows("dataset", "config", "train", n_samples=10, seed=42, max_requests=2)
+
+            assert len(result.rows) == 10
+            assert result.num_rows_total == 10000
+
+    @pytest.mark.asyncio
+    async def test_sample_rows_max_requests_one(self):
+        """Test sample_rows with max_requests=1 (single API call)."""
+        with aioresponses() as m:
+            # Mock info endpoint
+            m.get(
+                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
+                payload={
+                    "dataset_info": {
+                        "splits": {
+                            "train": {"name": "train", "num_examples": 50000}
+                        }
+                    },
+                    "pending": [],
+                    "failed": [],
+                    "partial": False,
+                },
+            )
+
+            # Mock single rows call with regex to handle random offset
+            import re
+            
+            m.get(
+                re.compile(r"https://datasets-server\.huggingface\.co/rows\?.*offset=\d+.*"),
+                payload={
+                    "features": [{"name": "text", "type": "string"}, {"name": "label", "type": "int"}],
+                    "rows": [
+                        {"row": {"text": f"Row {i}", "label": i % 2}} 
+                        for i in range(15000, 15100)
+                    ],
+                    "num_rows_total": 50000,
+                },
+            )
+
+            async with AsyncDatasetsServerClient() as client:
+                result = await client.sample_rows("dataset", "config", "train", n_samples=5, seed=123, max_requests=1)
+
+            assert len(result.rows) == 5
+            assert result.num_rows_total == 50000
+            # With max_requests=1, all samples come from a single API call
+
+    @pytest.mark.asyncio
+    async def test_sample_rows_max_requests_concurrent(self):
+        """Test that max_requests properly limits concurrent API calls."""
+        with aioresponses() as m:
+            # Mock info endpoint
+            m.get(
+                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
+                payload={
+                    "dataset_info": {
+                        "splits": {
+                            "train": {"name": "train", "num_examples": 100000}
+                        }
+                    },
+                    "pending": [],
+                    "failed": [],
+                    "partial": False,
+                },
+            )
+
+            # Mock multiple rows calls that should happen with max_requests=4
+            import re
+            
+            # Use regex to match any offset
+            m.get(
+                re.compile(r"https://datasets-server\.huggingface\.co/rows\?.*offset=\d+.*"),
+                payload={
+                    "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
+                    "rows": [
+                        {"row": {"text": f"Row {i}", "id": i}} 
+                        for i in range(100)  # Just return 100 rows regardless of offset
+                    ],
+                    "num_rows_total": 100000,
+                },
+                repeat=True,
+            )
+
+            async with AsyncDatasetsServerClient() as client:
+                result = await client.sample_rows("dataset", "config", "train", n_samples=20, seed=42, max_requests=4)
+
+            assert len(result.rows) == 20
+            assert result.num_rows_total == 100000
+            # With max_requests=4, we should have fetched from 4 different segments
