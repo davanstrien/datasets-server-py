@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `max_requests` parameter to `sample_rows` method for API-efficient sampling
+  - Allows limiting the number of API calls when sampling from large datasets
+  - Trades true randomness for API efficiency by sampling from dataset segments
+  - Useful for scenarios where approximate randomness is acceptable
+
 ## [0.1.0] - 2025-07-02
 
 ### Added
