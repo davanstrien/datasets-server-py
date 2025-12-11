@@ -7,6 +7,7 @@ from .exceptions import (
     DatasetNotFoundError,
     DatasetNotValidError,
     DatasetServerError,
+    DatasetServerHTTPError,
     DatasetServerTimeoutError,
 )
 from .models import (
@@ -33,6 +34,7 @@ __all__ = [
     "DatasetStatistics",
     # Exceptions
     "DatasetServerError",
+    "DatasetServerHTTPError",
     "DatasetNotFoundError",
     "DatasetNotValidError",
     "DatasetServerTimeoutError",

@@ -148,3 +148,7 @@ cython_debug/
 
 # UV
 .uv/
+
+# Claude Code / beads issue tracking
+.beads/
+AGENTS.md
