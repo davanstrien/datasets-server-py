@@ -1,7 +1,8 @@
 """Tests for asynchronous client."""
 
+import httpx
 import pytest
-from aioresponses import aioresponses
+import respx
 
 from datasets_server import AsyncDatasetsServerClient, DatasetNotFoundError, DatasetServerError
 from datasets_server.models import DatasetValidity
@@ -26,12 +27,13 @@ class TestAsyncDatasetsServerClient:
         # Session should be closed after exiting
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_is_valid_success(self):
         """Test successful is_valid call."""
-        with aioresponses() as m:
-            m.get(
-                "https://datasets-server.huggingface.co/is-valid?dataset=test-dataset",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/is-valid").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "viewer": True,
                     "preview": True,
                     "search": False,
@@ -39,37 +41,38 @@ class TestAsyncDatasetsServerClient:
                     "statistics": True,
                 },
             )
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                validity = await client.is_valid("test-dataset")
+        async with AsyncDatasetsServerClient() as client:
+            validity = await client.is_valid("test-dataset")
 
-            assert isinstance(validity, DatasetValidity)
-            assert validity.viewer is True
-            assert validity.preview is True
-            assert validity.search is False
+        assert isinstance(validity, DatasetValidity)
+        assert validity.viewer is True
+        assert validity.preview is True
+        assert validity.search is False
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_dataset_not_found(self):
         """Test handling of 404 errors."""
-        with aioresponses() as m:
-            m.get(
-                "https://datasets-server.huggingface.co/is-valid?dataset=non-existent",
-                status=404,
-            )
+        respx.get("https://datasets-server.huggingface.co/is-valid").mock(
+            return_value=httpx.Response(404, json={"error": "Not found"})
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                with pytest.raises(DatasetNotFoundError) as exc_info:
-                    await client.is_valid("non-existent")
+        async with AsyncDatasetsServerClient() as client:
+            with pytest.raises(DatasetNotFoundError) as exc_info:
+                await client.is_valid("non-existent")
 
-            assert "Dataset not found: non-existent" in str(exc_info.value)
+        assert "Dataset not found: non-existent" in str(exc_info.value)
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_list_splits(self):
         """Test list_splits method."""
-        with aioresponses() as m:
-            m.get(
-                "https://datasets-server.huggingface.co/splits?dataset=squad",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/splits").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "splits": [
                         {"dataset": "squad", "config": "plain_text", "split": "train"},
                         {"dataset": "squad", "config": "plain_text", "split": "validation"},
@@ -78,26 +81,28 @@ class TestAsyncDatasetsServerClient:
                     "failed": [],
                 },
             )
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                splits = await client.list_splits("squad")
+        async with AsyncDatasetsServerClient() as client:
+            splits = await client.list_splits("squad")
 
-            assert len(splits) == 2
-            assert splits[0].split == "train"
-            assert splits[1].split == "validation"
+        assert len(splits) == 2
+        assert splits[0].split == "train"
+        assert splits[1].split == "validation"
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_concurrent_requests(self):
         """Test making concurrent requests."""
         import asyncio
 
-        with aioresponses() as m:
-            # Mock multiple endpoints
-            datasets = ["dataset1", "dataset2", "dataset3"]
-            for ds in datasets:
-                m.get(
-                    f"https://datasets-server.huggingface.co/is-valid?dataset={ds}",
-                    payload={
+        # Mock multiple endpoints
+        datasets = ["dataset1", "dataset2", "dataset3"]
+        for ds in datasets:
+            respx.get("https://datasets-server.huggingface.co/is-valid", params={"dataset": ds}).mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
                         "viewer": True,
                         "preview": True,
                         "search": True,
@@ -105,14 +110,14 @@ class TestAsyncDatasetsServerClient:
                         "statistics": True,
                     },
                 )
+            )
 
-            async with AsyncDatasetsServerClient() as client:
-                # Make concurrent requests
-                tasks = [client.is_valid(ds) for ds in datasets]
-                results = await asyncio.gather(*tasks)
+        async with AsyncDatasetsServerClient() as client:
+            tasks = [client.is_valid(ds) for ds in datasets]
+            results = await asyncio.gather(*tasks)
 
-            assert len(results) == 3
-            assert all(r.viewer for r in results)
+        assert len(results) == 3
+        assert all(r.viewer for r in results)
 
     @pytest.mark.asyncio
     async def test_get_rows_with_invalid_length(self):
@@ -121,147 +126,165 @@ class TestAsyncDatasetsServerClient:
             with pytest.raises(ValueError) as exc_info:
                 await client.get_rows("dataset", "config", "split", length=150)
 
-            assert "Length cannot exceed 100" in str(exc_info.value)  # The MAX_ROWS_PER_REQUEST constant is 100
+            assert "Length cannot exceed 100" in str(exc_info.value)
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_iter_rows(self):
         """Test async row iteration."""
-        with aioresponses() as m:
-            # Mock first page
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=test&config=config&split=split&offset=0&length=100",
-                payload={
+        route = respx.get("https://datasets-server.huggingface.co/rows")
+        route.side_effect = [
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": f"Row {i}"}} for i in range(100)],
                 },
-            )
-            # Mock second page with fewer rows
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=test&config=config&split=split&offset=100&length=100",
-                payload={
+            ),
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": f"Row {i}"}} for i in range(100, 150)],
                 },
-            )
+            ),
+        ]
 
-            async with AsyncDatasetsServerClient() as client:
-                rows = []
-                async for row in client.iter_rows("test", "config", "split"):
-                    rows.append(row)
+        async with AsyncDatasetsServerClient() as client:
+            rows = []
+            async for row in client.iter_rows("test", "config", "split"):
+                rows.append(row)
 
-            assert len(rows) == 150
-            assert rows[0]["text"] == "Row 0"
-            assert rows[149]["text"] == "Row 149"
+        assert len(rows) == 150
+        assert rows[0]["text"] == "Row 0"
+        assert rows[149]["text"] == "Row 149"
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_search(self):
         """Test search functionality."""
-        with aioresponses() as m:
-            m.get(
-                "https://datasets-server.huggingface.co/search?dataset=squad&config=plain_text&split=train&query=test&offset=0&length=10",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/search").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": "Test result"}}],
                     "num_rows_total": 42,
                 },
             )
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                results = await client.search(
-                    dataset="squad",
-                    query="test",
-                    config="plain_text",
-                    split="train",
-                    length=10,
-                )
+        async with AsyncDatasetsServerClient() as client:
+            results = await client.search(
+                dataset="squad",
+                query="test",
+                config="plain_text",
+                split="train",
+                length=10,
+            )
 
-            assert len(results.rows) == 1
-            assert results.num_rows_total == 42
+        assert len(results.rows) == 1
+        assert results.num_rows_total == 42
 
     @pytest.mark.asyncio
     async def test_close_session(self):
-        """Test closing session manually."""
-        client = AsyncDatasetsServerClient()
-        await client._ensure_session()
-        assert client._session is not None
+        """Test closing session manually when using context manager."""
+        # When using context manager, a dedicated session is created
+        async with AsyncDatasetsServerClient() as client:
+            assert client._session is not None
+            assert client._owns_session is True
 
-        await client.close()
-        # Session should be closed
+        # Session should be closed and ownership released after context exit
+        assert client._session is None
+        assert client._owns_session is False
 
     @pytest.mark.asyncio
+    async def test_global_session_used_by_default(self):
+        """Test that global session is used when not using context manager."""
+        client = AsyncDatasetsServerClient()
+        # _session should be None (uses global session via property)
+        assert client._session is None
+        # But session property returns the global session
+        session = client.session
+        assert session is not None
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_generic_exception(self):
         """Test handling of generic exceptions during requests."""
-        with aioresponses() as m:
-            # Configure to raise a generic exception
-            m.get(
-                "https://datasets-server.huggingface.co/is-valid?dataset=error-dataset",
-                exception=Exception("Network error"),
-            )
+        respx.get("https://datasets-server.huggingface.co/is-valid").mock(
+            side_effect=Exception("Network error")
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                with pytest.raises(DatasetServerError) as exc_info:
-                    await client.is_valid("error-dataset")
+        async with AsyncDatasetsServerClient() as client:
+            with pytest.raises(DatasetServerError) as exc_info:
+                await client.is_valid("error-dataset")
 
-            assert "Request failed: Network error" in str(exc_info.value)
+        assert "Request failed: Network error" in str(exc_info.value)
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_get_info_with_config(self):
         """Test get_info method with optional config parameter."""
-        with aioresponses() as m:
-            m.get(
-                "https://datasets-server.huggingface.co/info?dataset=dataset&config=my_config",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/info").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "dataset_info": {"description": "Test dataset"},
                     "pending": [],
                     "failed": [],
                     "partial": False,
                 },
             )
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                info = await client.get_info("dataset", config="my_config")
+        async with AsyncDatasetsServerClient() as client:
+            info = await client.get_info("dataset", config="my_config")
 
-            assert info.dataset_info["description"] == "Test dataset"
+        assert info.dataset_info["description"] == "Test dataset"
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_filter_with_where_clause(self):
         """Test filter method with WHERE clause."""
-        with aioresponses() as m:
-            m.get(
-                "https://datasets-server.huggingface.co/filter?dataset=dataset&config=config&split=split&where=score+%3E+3&orderby=score+DESC&offset=10&length=50",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/filter").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}, {"name": "score", "type": "int32"}],
                     "rows": [{"row": {"text": "Test", "score": 5}}],
                     "num_rows_total": 1,
                 },
             )
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                results = await client.filter(
-                    dataset="dataset",
-                    config="config",
-                    split="split",
-                    where="score > 3",
-                    orderby="score DESC",
-                    offset=10,
-                    length=50,
-                )
+        async with AsyncDatasetsServerClient() as client:
+            results = await client.filter(
+                dataset="dataset",
+                config="config",
+                split="split",
+                where="score > 3",
+                orderby="score DESC",
+                offset=10,
+                length=50,
+            )
 
-            assert len(results.rows) == 1
-            assert results.rows[0]["row"]["score"] == 5
+        assert len(results.rows) == 1
+        assert results.rows[0]["row"]["score"] == 5
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_sample_rows_basic(self):
         """Test basic sample_rows functionality."""
-        with aioresponses() as m:
-            # Mock info endpoint
-            m.get(
-                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
-                payload={
+        # Mock info endpoint
+        respx.get("https://datasets-server.huggingface.co/info").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "dataset_info": {
                         "splits": {
                             "train": {"name": "train", "num_examples": 1000},
-                            "test": {"name": "test", "num_examples": 100}
+                            "test": {"name": "test", "num_examples": 100},
                         }
                     },
                     "pending": [],
@@ -269,92 +292,118 @@ class TestAsyncDatasetsServerClient:
                     "partial": False,
                 },
             )
+        )
 
-            # Mock rows endpoints for batched requests
-            # With seed=42 and 1000 rows, indices are [25, 114, 281, 654, 759]
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=25&length=90",
-                payload={
+        # Mock rows endpoint with multiple responses
+        rows_route = respx.get("https://datasets-server.huggingface.co/rows")
+        rows_route.side_effect = [
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": f"Row {i}"}} for i in range(25, 115)],
                     "num_rows_total": 1000,
                 },
-            )
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=281&length=1",
-                payload={
+            ),
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": "Row 281"}}],
                     "num_rows_total": 1000,
                 },
-            )
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=654&length=1",
-                payload={
+            ),
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": "Row 654"}}],
                     "num_rows_total": 1000,
                 },
-            )
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=759&length=1",
-                payload={
+            ),
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": "Row 759"}}],
                     "num_rows_total": 1000,
                 },
-            )
+            ),
+        ]
 
-            async with AsyncDatasetsServerClient() as client:
-                result = await client.sample_rows("dataset", "config", "train", n_samples=5, seed=42)
+        async with AsyncDatasetsServerClient() as client:
+            result = await client.sample_rows("dataset", "config", "train", n_samples=5, seed=42)
 
-            assert len(result.rows) == 5
-            assert result.num_rows_total == 1000
-            assert result.features == [{"name": "text", "type": "string"}]
+        assert len(result.rows) == 5
+        assert result.num_rows_total == 1000
+        assert result.features == [{"name": "text", "type": "string"}]
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_sample_rows_with_seed(self):
         """Test that sampling with seed is deterministic."""
-        with aioresponses() as m:
-            # Mock info endpoint (called twice)
-            for _ in range(2):
-                m.get(
-                    "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
-                    payload={
-                        "dataset_info": {
-                            "splits": {
+        # Mock info endpoint (called twice)
+        info_route = respx.get("https://datasets-server.huggingface.co/info")
+        info_route.side_effect = [
+            httpx.Response(
+                200,
+                json={
+                    "dataset_info": {
+                        "splits": {
                             "train": {"name": "train", "num_examples": 100}
                         }
-                        },
-                        "pending": [],
-                        "failed": [],
-                        "partial": False,
                     },
-                )
-
-            # Mock rows endpoints for seed=123 with 100 rows
-            # Indices are [4, 6, 11, 13, 34, 48, 52, 68, 71, 98]
-            # Since they span from 4 to 98 and are within 100 rows, they'll be fetched in one batch
-            for _ in range(2):  # Called twice due to test
-                m.get(
-                    "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=4&length=95",
-                    payload={
-                        "features": [{"name": "id", "type": "int32"}],
-                        "rows": [{"row": {"id": i}} for i in range(4, 99)],
-                        "num_rows_total": 100,
+                    "pending": [],
+                    "failed": [],
+                    "partial": False,
+                },
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "dataset_info": {
+                        "splits": {
+                            "train": {"name": "train", "num_examples": 100}
+                        }
                     },
-                )
+                    "pending": [],
+                    "failed": [],
+                    "partial": False,
+                },
+            ),
+        ]
 
-            async with AsyncDatasetsServerClient() as client:
-                # First sampling with seed
-                result1 = await client.sample_rows("dataset", "config", "train", n_samples=10, seed=123)
-                rows1 = [row["row"]["id"] for row in result1.rows]
+        # Mock rows endpoints
+        rows_route = respx.get("https://datasets-server.huggingface.co/rows")
+        rows_route.side_effect = [
+            httpx.Response(
+                200,
+                json={
+                    "features": [{"name": "id", "type": "int32"}],
+                    "rows": [{"row": {"id": i}} for i in range(4, 99)],
+                    "num_rows_total": 100,
+                },
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "features": [{"name": "id", "type": "int32"}],
+                    "rows": [{"row": {"id": i}} for i in range(4, 99)],
+                    "num_rows_total": 100,
+                },
+            ),
+        ]
 
-                # Second sampling with same seed should give same results
-                result2 = await client.sample_rows("dataset", "config", "train", n_samples=10, seed=123)
-                rows2 = [row["row"]["id"] for row in result2.rows]
+        async with AsyncDatasetsServerClient() as client:
+            # First sampling with seed
+            result1 = await client.sample_rows("dataset", "config", "train", n_samples=10, seed=123)
+            rows1 = [row["row"]["id"] for row in result1.rows]
 
-            assert rows1 == rows2
+            # Second sampling with same seed should give same results
+            result2 = await client.sample_rows("dataset", "config", "train", n_samples=10, seed=123)
+            rows2 = [row["row"]["id"] for row in result2.rows]
+
+        assert rows1 == rows2
 
     @pytest.mark.asyncio
     async def test_sample_rows_zero_samples(self):
@@ -376,13 +425,13 @@ class TestAsyncDatasetsServerClient:
             assert "n_samples must be non-negative" in str(exc_info.value)
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_sample_rows_exceeds_dataset_size(self):
         """Test sample_rows when requesting more samples than available."""
-        with aioresponses() as m:
-            # Mock info endpoint with small dataset
-            m.get(
-                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/info").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "dataset_info": {
                         "splits": {
                             "train": {"name": "train", "num_examples": 50}
@@ -393,88 +442,92 @@ class TestAsyncDatasetsServerClient:
                     "partial": False,
                 },
             )
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                with pytest.raises(ValueError) as exc_info:
-                    await client.sample_rows("dataset", "config", "train", n_samples=100)
+        async with AsyncDatasetsServerClient() as client:
+            with pytest.raises(ValueError) as exc_info:
+                await client.sample_rows("dataset", "config", "train", n_samples=100)
 
-                assert "Requested 100 samples but dataset only has 50 rows" in str(exc_info.value)
+            assert "Requested 100 samples but dataset only has 50 rows" in str(exc_info.value)
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_sample_rows_fallback_to_get_rows(self):
         """Test sample_rows when info doesn't contain split information."""
-        with aioresponses() as m:
-            # Mock info endpoint without splits
-            m.get(
-                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
-                payload={
+        # Mock info endpoint without splits
+        respx.get("https://datasets-server.huggingface.co/info").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "dataset_info": {"description": "Test dataset"},
                     "pending": [],
                     "failed": [],
                     "partial": False,
                 },
             )
+        )
 
-            # Mock first get_rows call to get total rows
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=0&length=1",
-                payload={
+        # Mock rows endpoint
+        rows_route = respx.get("https://datasets-server.huggingface.co/rows")
+        rows_route.side_effect = [
+            # First call to get total rows
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": "Row 0"}}],
                     "num_rows_total": 1000,
                 },
-            )
-
-            # Mock actual sampling calls with batched requests
-            # With seed=42 and 1000 rows, indices are [25, 114, 281, 654, 759]
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=25&length=90",
-                payload={
+            ),
+            # Sampling calls
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": f"Row {i}"}} for i in range(25, 115)],
                     "num_rows_total": 1000,
                 },
-            )
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=281&length=1",
-                payload={
+            ),
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": "Row 281"}}],
                     "num_rows_total": 1000,
                 },
-            )
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=654&length=1",
-                payload={
+            ),
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": "Row 654"}}],
                     "num_rows_total": 1000,
                 },
-            )
-            m.get(
-                "https://datasets-server.huggingface.co/rows?dataset=dataset&config=config&split=train&offset=759&length=1",
-                payload={
+            ),
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": "Row 759"}}],
                     "num_rows_total": 1000,
                 },
-            )
+            ),
+        ]
 
-            async with AsyncDatasetsServerClient() as client:
-                result = await client.sample_rows("dataset", "config", "train", n_samples=5, seed=42)
+        async with AsyncDatasetsServerClient() as client:
+            result = await client.sample_rows("dataset", "config", "train", n_samples=5, seed=42)
 
-            assert len(result.rows) == 5
-            assert result.num_rows_total == 1000
-
+        assert len(result.rows) == 5
+        assert result.num_rows_total == 1000
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_sample_rows_with_max_requests(self):
         """Test sample_rows with max_requests parameter."""
-        with aioresponses() as m:
-            # Mock info endpoint
-            m.get(
-                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/info").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "dataset_info": {
                         "splits": {
                             "train": {"name": "train", "num_examples": 10000}
@@ -485,37 +538,43 @@ class TestAsyncDatasetsServerClient:
                     "partial": False,
                 },
             )
+        )
 
-            # Mock rows calls for limited requests
-            # With max_requests=2, dataset is divided into 2 segments
-            # We don't know the exact offsets due to randomness, so mock with regex
-            import re
-            
-            # First segment (0-4999)
-            m.get(
-                re.compile(r"https://datasets-server\.huggingface\.co/rows\?.*offset=\d+.*"),
-                payload={
+        # Mock rows endpoint
+        rows_route = respx.get("https://datasets-server.huggingface.co/rows")
+        rows_route.side_effect = [
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}],
                     "rows": [{"row": {"text": f"Row {i}"}} for i in range(100)],
                     "num_rows_total": 10000,
                 },
-                repeat=True,
-            )
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "features": [{"name": "text", "type": "string"}],
+                    "rows": [{"row": {"text": f"Row {i}"}} for i in range(100)],
+                    "num_rows_total": 10000,
+                },
+            ),
+        ]
 
-            async with AsyncDatasetsServerClient() as client:
-                result = await client.sample_rows("dataset", "config", "train", n_samples=10, seed=42, max_requests=2)
+        async with AsyncDatasetsServerClient() as client:
+            result = await client.sample_rows("dataset", "config", "train", n_samples=10, seed=42, max_requests=2)
 
-            assert len(result.rows) == 10
-            assert result.num_rows_total == 10000
+        assert len(result.rows) == 10
+        assert result.num_rows_total == 10000
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_sample_rows_max_requests_one(self):
         """Test sample_rows with max_requests=1 (single API call)."""
-        with aioresponses() as m:
-            # Mock info endpoint
-            m.get(
-                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/info").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "dataset_info": {
                         "splits": {
                             "train": {"name": "train", "num_examples": 50000}
@@ -526,37 +585,36 @@ class TestAsyncDatasetsServerClient:
                     "partial": False,
                 },
             )
+        )
 
-            # Mock single rows call with regex to handle random offset
-            import re
-            
-            m.get(
-                re.compile(r"https://datasets-server\.huggingface\.co/rows\?.*offset=\d+.*"),
-                payload={
+        respx.get("https://datasets-server.huggingface.co/rows").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}, {"name": "label", "type": "int"}],
                     "rows": [
-                        {"row": {"text": f"Row {i}", "label": i % 2}} 
+                        {"row": {"text": f"Row {i}", "label": i % 2}}
                         for i in range(15000, 15100)
                     ],
                     "num_rows_total": 50000,
                 },
             )
+        )
 
-            async with AsyncDatasetsServerClient() as client:
-                result = await client.sample_rows("dataset", "config", "train", n_samples=5, seed=123, max_requests=1)
+        async with AsyncDatasetsServerClient() as client:
+            result = await client.sample_rows("dataset", "config", "train", n_samples=5, seed=123, max_requests=1)
 
-            assert len(result.rows) == 5
-            assert result.num_rows_total == 50000
-            # With max_requests=1, all samples come from a single API call
+        assert len(result.rows) == 5
+        assert result.num_rows_total == 50000
 
     @pytest.mark.asyncio
+    @respx.mock
     async def test_sample_rows_max_requests_concurrent(self):
         """Test that max_requests properly limits concurrent API calls."""
-        with aioresponses() as m:
-            # Mock info endpoint
-            m.get(
-                "https://datasets-server.huggingface.co/info?dataset=dataset&config=config",
-                payload={
+        respx.get("https://datasets-server.huggingface.co/info").mock(
+            return_value=httpx.Response(
+                200,
+                json={
                     "dataset_info": {
                         "splits": {
                             "train": {"name": "train", "num_examples": 100000}
@@ -567,27 +625,59 @@ class TestAsyncDatasetsServerClient:
                     "partial": False,
                 },
             )
+        )
 
-            # Mock multiple rows calls that should happen with max_requests=4
-            import re
-            
-            # Use regex to match any offset
-            m.get(
-                re.compile(r"https://datasets-server\.huggingface\.co/rows\?.*offset=\d+.*"),
-                payload={
+        # Mock rows endpoint
+        rows_route = respx.get("https://datasets-server.huggingface.co/rows")
+        rows_route.side_effect = [
+            httpx.Response(
+                200,
+                json={
                     "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
                     "rows": [
-                        {"row": {"text": f"Row {i}", "id": i}} 
-                        for i in range(100)  # Just return 100 rows regardless of offset
+                        {"row": {"text": f"Row {i}", "id": i}}
+                        for i in range(100)
                     ],
                     "num_rows_total": 100000,
                 },
-                repeat=True,
-            )
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
+                    "rows": [
+                        {"row": {"text": f"Row {i}", "id": i}}
+                        for i in range(100)
+                    ],
+                    "num_rows_total": 100000,
+                },
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
+                    "rows": [
+                        {"row": {"text": f"Row {i}", "id": i}}
+                        for i in range(100)
+                    ],
+                    "num_rows_total": 100000,
+                },
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
+                    "rows": [
+                        {"row": {"text": f"Row {i}", "id": i}}
+                        for i in range(100)
+                    ],
+                    "num_rows_total": 100000,
+                },
+            ),
+        ]
 
-            async with AsyncDatasetsServerClient() as client:
-                result = await client.sample_rows("dataset", "config", "train", n_samples=20, seed=42, max_requests=4)
+        async with AsyncDatasetsServerClient() as client:
+            result = await client.sample_rows("dataset", "config", "train", n_samples=20, seed=42, max_requests=4)
 
-            assert len(result.rows) == 20
-            assert result.num_rows_total == 100000
-            # With max_requests=4, we should have fetched from 4 different segments
+        assert len(result.rows) == 20
+        assert result.num_rows_total == 100000

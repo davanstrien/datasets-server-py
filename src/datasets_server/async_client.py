@@ -2,10 +2,12 @@
 
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-import aiohttp
+import httpx
 
 from ._base import BaseClient
-from .exceptions import DatasetNotFoundError, DatasetServerError
+from ._http import async_http_backoff, get_async_session
+from .constants import DEFAULT_REQUEST_TIMEOUT, MAX_ROWS_PER_REQUEST, RETRY_STATUS_CODES
+from .exceptions import DatasetNotFoundError, DatasetServerError, DatasetServerHTTPError
 from .models import (
     DatasetInfo,
     DatasetRows,
@@ -20,54 +22,69 @@ from .models import (
 class AsyncDatasetsServerClient(BaseClient):
     """Asynchronous client for the Hugging Face Datasets Viewer API.
 
+    By default, uses a global shared async HTTP session for efficiency. When used
+    as an async context manager, creates a dedicated session that is closed on exit.
+
     Examples:
         >>> import asyncio
         >>> from datasets_server import AsyncDatasetsServerClient
         >>>
         >>> async def main():
+        ...     # Using global session (recommended for most cases)
+        ...     client = AsyncDatasetsServerClient()
+        ...     validity = await client.is_valid("squad")
+        ...
+        ...     # Or with dedicated session
         ...     async with AsyncDatasetsServerClient() as client:
-        ...         validity = await client.is_valid("squad")
-        ...         if validity.preview:
-        ...             rows = await client.preview("squad")
+        ...         rows = await client.preview("squad")
         >>>
         >>> asyncio.run(main())
     """
-
-    MAX_ROWS_PER_REQUEST = 100  # Maximum rows allowed per API request
 
     def __init__(
         self,
         token: Optional[str] = None,
         endpoint: Optional[str] = None,
-        timeout: float = 30.0,
+        timeout: float = DEFAULT_REQUEST_TIMEOUT,
     ):
         """Initialize the asynchronous client.
 
         Args:
             token: Optional HuggingFace API token. If not provided, will attempt to use cached token.
-            endpoint: Optional API endpoint URL. Defaults to official endpoint.
-            timeout: Request timeout in seconds. Defaults to 30.0.
+            endpoint: Optional API endpoint URL. Defaults to HF_DATASETS_SERVER_ENDPOINT.
+            timeout: Request timeout in seconds. Defaults to DEFAULT_REQUEST_TIMEOUT.
         """
         super().__init__(token, endpoint, timeout)
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: Optional[httpx.AsyncClient] = None
+        self._owns_session = False
+
+    @property
+    def session(self) -> httpx.AsyncClient:
+        """Get the async HTTP session, using global shared session by default."""
+        if self._session is not None:
+            return self._session
+        return get_async_session(self.timeout)
 
     async def __aenter__(self):
-        """Async context manager entry."""
-        self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout))
+        """Async context manager entry - creates a dedicated session."""
+        self._session = httpx.AsyncClient(timeout=httpx.Timeout(self.timeout))
+        self._owns_session = True
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        if self._session:
-            await self._session.close()
+        """Async context manager exit - closes dedicated session."""
+        if self._owns_session and self._session is not None:
+            await self._session.aclose()
+            self._session = None
+            self._owns_session = False
 
     async def _ensure_session(self):
-        """Ensure session exists."""
-        if self._session is None:
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout))
+        """Ensure session exists (deprecated, kept for compatibility)."""
+        # This method is now a no-op since we use the session property
+        pass
 
     async def _request(self, method: str, path: str, params: Optional[Dict] = None) -> Dict[str, Any]:
-        """Make async HTTP request to the API.
+        """Make async HTTP request to the API with automatic retry for transient errors.
 
         Args:
             method: HTTP method (GET, POST, etc.)
@@ -81,19 +98,26 @@ class AsyncDatasetsServerClient(BaseClient):
             DatasetNotFoundError: If dataset is not found (404)
             DatasetServerError: For other API errors
         """
-        await self._ensure_session()
         url = f"{self.endpoint}{path}"
 
+        async def _do_request() -> httpx.Response:
+            response = await self.session.request(
+                method=method, url=url, params=params, headers=self.headers
+            )
+            response.raise_for_status()
+            return response
+
         try:
-            async with self._session.request(method=method, url=url, params=params, headers=self.headers) as response:
-                if response.status == 404:
-                    raise DatasetNotFoundError(f"Dataset not found: {params.get('dataset', 'unknown')}")
-                response.raise_for_status()
-                return await response.json()
-        except aiohttp.ClientResponseError as e:
-            raise DatasetServerError(f"API error: {e}") from e
-        except DatasetNotFoundError:
-            raise
+            # Use async_http_backoff for automatic retry on transient errors
+            response = await async_http_backoff(_do_request, retry_on=RETRY_STATUS_CODES)
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise DatasetNotFoundError(
+                    f"Dataset not found: {params.get('dataset', 'unknown')}",
+                    response=e.response,
+                ) from e
+            raise DatasetServerHTTPError(f"API error: {e}", response=e.response) from e
         except Exception as e:
             raise DatasetServerError(f"Request failed: {e}") from e
 
@@ -213,8 +237,8 @@ class AsyncDatasetsServerClient(BaseClient):
         Raises:
             ValueError: If length exceeds MAX_ROWS_PER_REQUEST.
         """
-        if length > self.MAX_ROWS_PER_REQUEST:
-            raise ValueError(f"Length cannot exceed {self.MAX_ROWS_PER_REQUEST} rows per request")
+        if length > MAX_ROWS_PER_REQUEST:
+            raise ValueError(f"Length cannot exceed {MAX_ROWS_PER_REQUEST} rows per request")
 
         params = {
             "dataset": dataset,
@@ -440,7 +464,7 @@ class AsyncDatasetsServerClient(BaseClient):
             batch_indices = [indices[i]]
 
             j = i + 1
-            while j < len(indices) and indices[j] - batch_start < self.MAX_ROWS_PER_REQUEST:
+            while j < len(indices) and indices[j] - batch_start < MAX_ROWS_PER_REQUEST:
                 batch_indices.append(indices[j])
                 j += 1
 
@@ -450,7 +474,7 @@ class AsyncDatasetsServerClient(BaseClient):
             if len(batch_indices) == 1:
                 length = 1
             else:
-                length = min(self.MAX_ROWS_PER_REQUEST, batch_indices[-1] - batch_start + 1)
+                length = min(MAX_ROWS_PER_REQUEST, batch_indices[-1] - batch_start + 1)
 
             batch = await self.get_rows(dataset, config, split, offset=offset, length=length)
 
@@ -482,20 +506,20 @@ class AsyncDatasetsServerClient(BaseClient):
         max_requests: int,
     ) -> DatasetRows:
         """Sample rows with limited API requests.
-        
+
         This method divides the dataset into segments and fetches rows from
         random offsets within each segment, then samples from the collected rows.
         """
         import random
-        
+
         # Calculate segment size and samples per segment
         segment_size = total_rows // max_requests
         base_samples_per_segment = n_samples // max_requests
         extra_samples = n_samples % max_requests
-        
+
         all_rows = []
         features = None
-        
+
         for i in range(max_requests):
             # Calculate segment boundaries
             segment_start = i * segment_size
@@ -504,29 +528,29 @@ class AsyncDatasetsServerClient(BaseClient):
                 segment_end = total_rows
             else:
                 segment_end = (i + 1) * segment_size
-            
+
             # Calculate samples for this segment
             samples_from_segment = base_samples_per_segment
             if i < extra_samples:
                 samples_from_segment += 1
-            
+
             if samples_from_segment == 0:
                 continue
-            
+
             # Pick random offset within segment
-            max_offset = segment_end - min(self.MAX_ROWS_PER_REQUEST, segment_end - segment_start)
+            max_offset = segment_end - min(MAX_ROWS_PER_REQUEST, segment_end - segment_start)
             offset = random.randint(segment_start, max(segment_start, max_offset))
-            
+
             # Fetch rows from this offset
-            length = min(self.MAX_ROWS_PER_REQUEST, segment_end - offset)
+            length = min(MAX_ROWS_PER_REQUEST, segment_end - offset)
             batch = await self.get_rows(dataset, config, split, offset=offset, length=length)
-            
+
             if features is None:
                 features = batch.features
-            
+
             # Collect all rows from this batch
             all_rows.extend(batch.rows)
-        
+
         # Sample from collected rows
         if len(all_rows) < n_samples:
             # If we couldn't fetch enough rows, return what we have
@@ -535,7 +559,7 @@ class AsyncDatasetsServerClient(BaseClient):
             # Sample n_samples from all collected rows
             sampled_indices = random.sample(range(len(all_rows)), n_samples)
             sampled_rows = [all_rows[i] for i in sampled_indices]
-        
+
         return DatasetRows(
             features=features or [],
             rows=sampled_rows,
@@ -544,6 +568,12 @@ class AsyncDatasetsServerClient(BaseClient):
         )
 
     async def close(self):
-        """Close the session."""
-        if self._session:
-            await self._session.close()
+        """Close the dedicated session if one exists.
+
+        Note: This only closes sessions created via context manager or explicit
+        creation. The global shared session is managed automatically.
+        """
+        if self._owns_session and self._session is not None:
+            await self._session.aclose()
+            self._session = None
+            self._owns_session = False

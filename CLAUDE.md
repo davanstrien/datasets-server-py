@@ -1,3 +1,7 @@
+**Note**: This project uses [bd (beads)](https://github.com/steveyegge/beads)
+for issue tracking. Use `bd` commands instead of markdown TODOs.
+See AGENTS.md for workflow details.
+
 # Datasets Server API Python Client - Implementation Plan
 
 ## Executive Summary
@@ -7,9 +11,11 @@ This document outlines the implementation plan for `datasets-server-py`, a stand
 ## Project Overview
 
 ### Package Name
+
 `datasets-server-py` (or `datasets-viewer-py`)
 
 ### Goals
+
 1. Create a simple, functional client for the Datasets Viewer API
 2. **Provide both sync and async interfaces**
 3. Validate user interest and gather feedback
@@ -17,6 +23,7 @@ This document outlines the implementation plan for `datasets-server-py`, a stand
 5. Minimize complexity while maximizing utility
 
 ### Non-Goals (for initial version)
+
 1. Full huggingface_hub integration
 2. Complex caching mechanisms
 3. CLI interface
@@ -63,60 +70,70 @@ datasets-server-py/
 Base URL: `https://datasets-server.huggingface.co`
 
 ### 1. Dataset Validation
+
 - **Endpoint**: `/is-valid`
 - **Method**: GET
 - **Parameters**: `dataset` (required)
 - **Response**: `{viewer: bool, preview: bool, search: bool, filter: bool, statistics: bool}`
 
 ### 2. List Splits
+
 - **Endpoint**: `/splits`
 - **Method**: GET
 - **Parameters**: `dataset` (required)
 - **Response**: `{splits: [...], pending: [...], failed: [...]}`
 
 ### 3. Dataset Information
+
 - **Endpoint**: `/info`
 - **Method**: GET
 - **Parameters**: `dataset` (required), `config` (optional)
 - **Response**: Dataset metadata including features, description, citation, etc.
 
 ### 4. Dataset Size
+
 - **Endpoint**: `/size`
 - **Method**: GET
 - **Parameters**: `dataset` (required)
 - **Response**: Size information including rows and bytes
 
 ### 5. Parquet Files
+
 - **Endpoint**: `/parquet`
 - **Method**: GET
 - **Parameters**: `dataset` (required)
 - **Response**: List of Parquet file URLs with metadata
 
 ### 6. Preview Rows
+
 - **Endpoint**: `/first-rows`
 - **Method**: GET
 - **Parameters**: `dataset` (required), `config` (optional), `split` (optional)
 - **Response**: First 100 rows with features schema (max 1MB)
 
 ### 7. Get Rows
+
 - **Endpoint**: `/rows`
 - **Method**: GET
 - **Parameters**: `dataset`, `config`, `split`, `offset`, `length` (max 100)
 - **Response**: Paginated dataset rows
 
 ### 8. Search Dataset
+
 - **Endpoint**: `/search`
 - **Method**: GET
 - **Parameters**: `dataset`, `config`, `split`, `query`, `offset`, `length`
 - **Response**: Rows matching search query
 
 ### 9. Filter Dataset
+
 - **Endpoint**: `/filter`
 - **Method**: GET
 - **Parameters**: `dataset`, `config`, `split`, `where`, `orderby`, `offset`, `length`
 - **Response**: Filtered rows based on SQL-like conditions
 
 ### 10. Dataset Statistics
+
 - **Endpoint**: `/statistics`
 - **Method**: GET
 - **Parameters**: `dataset`, `config`, `split`
@@ -125,27 +142,32 @@ Base URL: `https://datasets-server.huggingface.co`
 ## Implementation Notes
 
 ### Authentication
+
 - Uses HuggingFace tokens for private/gated datasets
 - Token retrieved from huggingface_hub if available
 - Optional token parameter for explicit authentication
 
 ### Error Handling
+
 - Custom exceptions for different error scenarios
 - Clear error messages for debugging
 - Proper handling of 404s, timeouts, and API errors
 
 ### Response Models
+
 - Pydantic models for type safety and validation
 - All responses properly typed
 - Partial results handled gracefully
 
 ### Async Support
+
 - Full async client with same API as sync client
 - Proper session management
 - Support for concurrent requests
 - AsyncIterator for row iteration
 
 ### Development Practices
+
 - UV for package management
 - Ruff for linting and formatting
 - pytest for testing (with pytest-asyncio)
@@ -183,6 +205,7 @@ This standalone package is designed to be easily integrated into huggingface_hub
 ## Implementation Status
 
 ### Completed Features
+
 - Full implementation of all 10 API endpoints
 - Both synchronous and asynchronous clients
 - Type-safe Pydantic models for all responses
@@ -193,6 +216,7 @@ This standalone package is designed to be easily integrated into huggingface_hub
 - 87% test coverage with comprehensive test suite
 
 ### Recent Improvements
+
 - Fixed DatasetSize model to match actual API response structure
 - Resolved environment-dependent test failures
 - Added proper exception chaining (fixed ruff B904 violations)
@@ -204,6 +228,7 @@ This standalone package is designed to be easily integrated into huggingface_hub
 - Created GitHub Actions CI/CD workflow
 
 ### Code Quality
+
 - All ruff linting checks passing
 - Type hints throughout the codebase
 - Comprehensive docstrings for all public APIs
@@ -215,27 +240,32 @@ This standalone package is designed to be easily integrated into huggingface_hub
 The following helper functions have been identified for future implementation:
 
 ### Priority 1 - Core Helpers
+
 - ✅ `sample_rows(dataset, config, split, n_samples, seed)` - Get random sample of rows (COMPLETED)
 - `get_first_valid_split(dataset)` - Find the first valid split for a dataset
 - `get_default_split(dataset)` - Get the default/recommended split
 
 ### Priority 2 - Data Analysis
+
 - `find_text_columns(dataset, config, split)` - Identify text columns
 - `find_numeric_columns(dataset, config, split)` - Identify numeric columns
 - `get_feature_types(dataset, config, split)` - Get dict of column names to types
 
 ### Priority 3 - Dataset Health
+
 - `get_dataset_summary(dataset)` - Get comprehensive dataset overview
 - `check_dataset_health(dataset)` - Check if all expected features work
 
 ## Running Tests
 
 ### Unit Tests (default)
+
 ```bash
 uv run pytest
 ```
 
 ### Integration Tests
+
 ```bash
 # For bash/zsh
 INTEGRATION_TESTS=1 uv run pytest
@@ -245,6 +275,7 @@ env INTEGRATION_TESTS=1 uv run pytest
 ```
 
 ### Full Test Suite with Coverage
+
 ```bash
 # For fish shell
 env INTEGRATION_TESTS=1 uv run pytest --cov=datasets_server --cov-report=html

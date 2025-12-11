@@ -14,7 +14,8 @@ def sync_sampling_examples():
 
     # Example 1: Basic random sampling
     print("1. Basic random sampling from IMDB dataset:")
-    samples = client.sample_rows("stanfordnlp/imdb", "plain_text", "train", n_samples=3)
+    samples = client.sample_rows("stanfordnlp/imdb", "plain_text", "train", n_samples=100, max_requests=2)
+    print(samples)
     for i, row in enumerate(samples.rows):
         text = row["row"]["text"][:100] + "..." if len(row["row"]["text"]) > 100 else row["row"]["text"]
         label = row["row"]["label"]
@@ -57,41 +58,31 @@ def sync_sampling_examples():
 
     # Example 4: API-efficient sampling with max_requests
     print("4. API-efficient sampling with max_requests:")
-    
+
     # Sample from large dataset with limited API calls
     print("   Sampling from large dataset with max_requests=1 (single API call):")
     efficient_samples = client.sample_rows(
-        "stanfordnlp/imdb", 
-        "plain_text", 
-        "train", 
-        n_samples=5, 
-        seed=42,
-        max_requests=1
+        "stanfordnlp/imdb", "plain_text", "train", n_samples=5, seed=42, max_requests=1
     )
     print(f"   Got {len(efficient_samples.rows)} samples using only 1 API call")
     print("   This is less random but more API-friendly for large datasets\n")
-    
+
     # Compare with default behavior
     print("   Comparing max_requests strategies:")
-    
+
     # With max_requests=1
     samples_1_req = client.sample_rows(
-        "stanfordnlp/imdb", "plain_text", "train", 
-        n_samples=10, seed=42, max_requests=1
+        "stanfordnlp/imdb", "plain_text", "train", n_samples=10, seed=42, max_requests=1
     )
-    
+
     # With max_requests=3
     samples_3_req = client.sample_rows(
-        "stanfordnlp/imdb", "plain_text", "train", 
-        n_samples=10, seed=42, max_requests=3
+        "stanfordnlp/imdb", "plain_text", "train", n_samples=10, seed=42, max_requests=3
     )
-    
+
     # Default (no limit)
-    samples_default = client.sample_rows(
-        "stanfordnlp/imdb", "plain_text", "train", 
-        n_samples=10, seed=42
-    )
-    
+    samples_default = client.sample_rows("stanfordnlp/imdb", "plain_text", "train", n_samples=10, seed=42)
+
     print(f"   max_requests=1: All samples from single batch (less random)")
     print(f"   max_requests=3: Samples from up to 3 different parts of dataset")
     print(f"   max_requests=None: True random sampling (may use many API calls)")
@@ -146,31 +137,28 @@ async def async_sampling_examples():
 
         # Example 2: API-efficient sampling with max_requests
         print("2. API-efficient async sampling with max_requests:")
-        
+
         # Sample from multiple large datasets with limited API calls
         tasks = [
-            client.sample_rows("stanfordnlp/imdb", "plain_text", "train", 
-                             n_samples=5, seed=42, max_requests=1),
-            client.sample_rows("SetFit/ag_news", "default", "train", 
-                             n_samples=5, seed=42, max_requests=2),
-            client.sample_rows("davanstrien/haiku_dpo", "default", "train", 
-                             n_samples=5, seed=42, max_requests=3),
+            client.sample_rows("stanfordnlp/imdb", "plain_text", "train", n_samples=5, seed=42, max_requests=1),
+            client.sample_rows("SetFit/ag_news", "default", "train", n_samples=5, seed=42, max_requests=2),
+            client.sample_rows("davanstrien/haiku_dpo", "default", "train", n_samples=5, seed=42, max_requests=3),
         ]
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         configs = [
             ("stanfordnlp/imdb", "max_requests=1"),
             ("SetFit/ag_news", "max_requests=2"),
             ("davanstrien/haiku_dpo", "max_requests=3"),
         ]
-        
+
         for (dataset, config), result in zip(configs, results):
             if isinstance(result, Exception):
                 print(f"   {dataset} ({config}): Error - {result}")
             else:
                 print(f"   {dataset} ({config}): Got {len(result.rows)} samples")
-        
+
         print()
 
         # Example 3: Sampling with different seeds
