@@ -2,12 +2,10 @@
 
 import platform
 import sys
-
-import pytest
 from unittest.mock import patch
 
-from datasets_server._headers import build_hf_headers, get_token_to_send, LIBRARY_NAME
 from datasets_server.__version__ import __version__
+from datasets_server._headers import LIBRARY_NAME, build_hf_headers, get_token_to_send
 
 
 class TestBuildHfHeaders:

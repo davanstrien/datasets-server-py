@@ -2,7 +2,8 @@
 """Demonstration of the sample_rows functionality."""
 
 import asyncio
-from datasets_server import DatasetsServerClient, AsyncDatasetsServerClient
+
+from datasets_server import AsyncDatasetsServerClient, DatasetsServerClient
 
 
 def sync_sampling_examples():
@@ -14,8 +15,8 @@ def sync_sampling_examples():
 
     # Example 1: Basic random sampling
     print("1. Basic random sampling from IMDB dataset:")
-    samples = client.sample_rows("stanfordnlp/imdb", "plain_text", "train", n_samples=100, max_requests=2)
-    print(samples)
+    samples = client.sample_rows("stanfordnlp/imdb", "plain_text", "train", n_samples=5, max_requests=2)
+    print(f"   Sampled {len(samples.rows)} rows:")
     for i, row in enumerate(samples.rows):
         text = row["row"]["text"][:100] + "..." if len(row["row"]["text"]) > 100 else row["row"]["text"]
         label = row["row"]["label"]
@@ -83,9 +84,9 @@ def sync_sampling_examples():
     # Default (no limit)
     samples_default = client.sample_rows("stanfordnlp/imdb", "plain_text", "train", n_samples=10, seed=42)
 
-    print(f"   max_requests=1: All samples from single batch (less random)")
-    print(f"   max_requests=3: Samples from up to 3 different parts of dataset")
-    print(f"   max_requests=None: True random sampling (may use many API calls)")
+    print(f"   max_requests=1: Got {len(samples_1_req.rows)} samples from single batch (less random)")
+    print(f"   max_requests=3: Got {len(samples_3_req.rows)} samples from up to 3 different parts")
+    print(f"   max_requests=None: Got {len(samples_default.rows)} samples with true random sampling")
     print()
 
     # Example 5: Edge cases

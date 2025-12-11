@@ -1,13 +1,13 @@
 """Tests for HTTP utilities including retry logic."""
 
-import pytest
 import httpx
+import pytest
 
 from datasets_server._http import (
     _calculate_wait_time,
     _get_retry_after,
-    http_backoff,
     async_http_backoff,
+    http_backoff,
 )
 
 

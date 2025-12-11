@@ -56,6 +56,8 @@ class DatasetServerHTTPError(DatasetServerError, OSError):
             self.status_code = response.status_code
 
             # Try to extract error message from JSON response
+            # Intentionally broad except: JSON parsing failures should never
+            # prevent error handling from completing (matches huggingface_hub pattern)
             try:
                 error_data = response.json()
                 if isinstance(error_data, dict):

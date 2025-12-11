@@ -6,7 +6,12 @@ import httpx
 import pytest
 import respx
 
-from datasets_server import DatasetNotFoundError, DatasetServerError, DatasetsServerClient
+from datasets_server import (
+    DatasetNotFoundError,
+    DatasetServerError,
+    DatasetServerHTTPError,
+    DatasetsServerClient,
+)
 from datasets_server.models import DatasetValidity
 
 
@@ -84,16 +89,27 @@ class TestDatasetsServerClient:
 
     @respx.mock
     def test_api_error(self):
-        """Test handling of other HTTP errors."""
+        """Test handling of other HTTP errors raises DatasetServerHTTPError with context."""
+        # Use 400 Bad Request (not in RETRY_STATUS_CODES) to avoid retry delays
         respx.get("https://datasets-server.huggingface.co/is-valid").mock(
-            return_value=httpx.Response(500, json={"error": "Internal Server Error"})
+            return_value=httpx.Response(
+                400,
+                json={"error": "Bad Request"},
+                headers={"x-request-id": "test-request-123"},
+            )
         )
 
         client = DatasetsServerClient()
-        with pytest.raises(DatasetServerError) as exc_info:
+        with pytest.raises(DatasetServerHTTPError) as exc_info:
             client.is_valid("test-dataset")
 
-        assert "API error:" in str(exc_info.value)
+        # Verify response context is captured
+        error = exc_info.value
+        assert error.status_code == 400
+        assert error.request_id == "test-request-123"
+        assert error.server_message == "Bad Request"
+        assert error.response is not None
+        assert "API error:" in str(error)
 
     @respx.mock
     def test_generic_exception(self):

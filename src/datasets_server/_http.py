@@ -140,21 +140,15 @@ async def reset_async_session() -> None:
 def _reset_async_session_sync() -> None:
     """Synchronous version of reset for atexit handler.
 
-    This uses the synchronous close method which may not fully clean up
-    async resources but is safe to call from atexit.
+    Note: httpx AsyncClient has no sync close method, so we just set to None
+    and let the garbage collector handle cleanup. This may leave some async
+    cleanup pending, but it's the best we can do in a synchronous atexit handler.
     """
     global _GLOBAL_ASYNC_CLIENT
 
     with _ASYNC_CLIENT_LOCK:
         if _GLOBAL_ASYNC_CLIENT is not None:
-            # Note: This may leave some async cleanup pending, but it's
-            # the best we can do in a synchronous atexit handler
-            try:
-                # httpx AsyncClient has no sync close, so we just set to None
-                # The garbage collector will handle cleanup
-                pass
-            finally:
-                _GLOBAL_ASYNC_CLIENT = None
+            _GLOBAL_ASYNC_CLIENT = None
 
 
 # =============================================================================

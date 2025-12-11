@@ -72,6 +72,8 @@ def get_token_to_send(token: Optional[str] = None) -> Optional[str]:
         return token
 
     # Try to get cached token from huggingface_hub
+    # Intentionally broad except: token retrieval failures (import errors, API changes)
+    # should never prevent requests from being made (matches huggingface_hub pattern)
     try:
         from huggingface_hub import HfFolder
 
