@@ -4,7 +4,12 @@ import httpx
 import pytest
 import respx
 
-from datasets_server import AsyncDatasetsServerClient, DatasetNotFoundError, DatasetServerError
+from datasets_server import (
+    AsyncDatasetsServerClient,
+    DatasetNotFoundError,
+    DatasetServerError,
+    DatasetServerHTTPError,
+)
 from datasets_server.models import DatasetValidity
 
 
@@ -64,6 +69,31 @@ class TestAsyncDatasetsServerClient:
                 await client.is_valid("non-existent")
 
         assert "Dataset not found: non-existent" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_api_error(self):
+        """Test handling of other HTTP errors raises DatasetServerHTTPError with context."""
+        # Use 400 Bad Request (not in RETRY_STATUS_CODES) to avoid retry delays
+        respx.get("https://datasets-server.huggingface.co/is-valid").mock(
+            return_value=httpx.Response(
+                400,
+                json={"error": "Bad Request"},
+                headers={"x-request-id": "test-request-123"},
+            )
+        )
+
+        async with AsyncDatasetsServerClient() as client:
+            with pytest.raises(DatasetServerHTTPError) as exc_info:
+                await client.is_valid("test-dataset")
+
+        # Verify response context is captured
+        error = exc_info.value
+        assert error.status_code == 400
+        assert error.request_id == "test-request-123"
+        assert error.server_message == "Bad Request"
+        assert error.response is not None
+        assert "API error:" in str(error)
 
     @pytest.mark.asyncio
     @respx.mock
