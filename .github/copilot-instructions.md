@@ -14,7 +14,7 @@
 
 - **Language**: Python 3.8+
 - **Package Manager**: UV
-- **HTTP Client**: httpx (planned migration from requests)
+- **HTTP Client**: httpx
 - **Models**: Pydantic v2
 - **Testing**: pytest, pytest-asyncio
 - **Linting**: Ruff
