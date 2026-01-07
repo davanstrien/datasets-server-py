@@ -39,7 +39,7 @@ class DatasetServerHTTPError(DatasetServerError, OSError):
         message: str,
         *,
         response: Optional[httpx.Response] = None,
-    ):
+    ) -> None:
         """Initialize the HTTP error with response context.
 
         Args:
@@ -94,7 +94,7 @@ class DatasetNotFoundError(DatasetServerHTTPError):
         message: str,
         *,
         response: Optional[httpx.Response] = None,
-    ):
+    ) -> None:
         """Initialize the not found error.
 
         Args:

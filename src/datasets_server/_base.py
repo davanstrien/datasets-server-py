@@ -17,7 +17,7 @@ class BaseClient(ABC):
         token: Optional[str] = None,
         endpoint: Optional[str] = None,
         timeout: float = DEFAULT_REQUEST_TIMEOUT,
-    ):
+    ) -> None:
         """Initialize base client.
 
         Args:

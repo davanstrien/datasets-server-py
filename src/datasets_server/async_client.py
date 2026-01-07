@@ -46,7 +46,7 @@ class AsyncDatasetsServerClient(BaseClient):
         token: Optional[str] = None,
         endpoint: Optional[str] = None,
         timeout: float = DEFAULT_REQUEST_TIMEOUT,
-    ):
+    ) -> None:
         """Initialize the asynchronous client.
 
         Args:
@@ -65,20 +65,20 @@ class AsyncDatasetsServerClient(BaseClient):
             return self._session
         return get_async_session(self.timeout)
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "AsyncDatasetsServerClient":
         """Async context manager entry - creates a dedicated session."""
         self._session = httpx.AsyncClient(timeout=httpx.Timeout(self.timeout))
         self._owns_session = True
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit - closes dedicated session."""
         if self._owns_session and self._session is not None:
             await self._session.aclose()
             self._session = None
             self._owns_session = False
 
-    async def _ensure_session(self):
+    async def _ensure_session(self) -> None:
         """Ensure session exists (deprecated, kept for compatibility)."""
         # This method is now a no-op since we use the session property
         pass
@@ -113,8 +113,9 @@ class AsyncDatasetsServerClient(BaseClient):
             return response.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
+                dataset_name = params.get("dataset", "unknown") if params else "unknown"
                 raise DatasetNotFoundError(
-                    f"Dataset not found: {params.get('dataset', 'unknown')}",
+                    f"Dataset not found: {dataset_name}",
                     response=e.response,
                 ) from e
             raise DatasetServerHTTPError(f"API error: {e}", response=e.response) from e

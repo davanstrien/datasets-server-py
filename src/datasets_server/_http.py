@@ -63,6 +63,7 @@ def get_session(timeout: float = DEFAULT_REQUEST_TIMEOUT) -> httpx.Client:
             if _GLOBAL_SYNC_CLIENT is None:
                 _GLOBAL_SYNC_CLIENT = _build_sync_client(timeout)
 
+    assert _GLOBAL_SYNC_CLIENT is not None  # Guaranteed by double-checked locking above
     return _GLOBAL_SYNC_CLIENT
 
 
@@ -120,6 +121,7 @@ def get_async_session(timeout: float = DEFAULT_REQUEST_TIMEOUT) -> httpx.AsyncCl
             if _GLOBAL_ASYNC_CLIENT is None:
                 _GLOBAL_ASYNC_CLIENT = _build_async_client(timeout)
 
+    assert _GLOBAL_ASYNC_CLIENT is not None  # Guaranteed by double-checked locking above
     return _GLOBAL_ASYNC_CLIENT
 
 

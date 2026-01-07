@@ -42,7 +42,7 @@ class DatasetsServerClient(BaseClient):
         token: Optional[str] = None,
         endpoint: Optional[str] = None,
         timeout: float = DEFAULT_REQUEST_TIMEOUT,
-    ):
+    ) -> None:
         """Initialize the synchronous client.
 
         Args:
@@ -95,8 +95,9 @@ class DatasetsServerClient(BaseClient):
             return response.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
+                dataset_name = params.get("dataset", "unknown") if params else "unknown"
                 raise DatasetNotFoundError(
-                    f"Dataset not found: {params.get('dataset', 'unknown')}",
+                    f"Dataset not found: {dataset_name}",
                     response=e.response,
                 ) from e
             raise DatasetServerHTTPError(f"API error: {e}", response=e.response) from e
@@ -549,13 +550,13 @@ class DatasetsServerClient(BaseClient):
             partial=False,
         )
 
-    def __enter__(self):
+    def __enter__(self) -> "DatasetsServerClient":
         """Context manager support - creates a dedicated session."""
         self._session = httpx.Client(timeout=httpx.Timeout(self.timeout))
         self._owns_session = True
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Close dedicated session on exit."""
         if self._owns_session and self._session is not None:
             self._session.close()
