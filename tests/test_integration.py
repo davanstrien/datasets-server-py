@@ -78,11 +78,14 @@ class TestIntegrationSync:
         info = self.client.get_info(TEST_DATASETS["reviews"])
 
         assert info.dataset_info is not None
-        assert "splits" in info.dataset_info
-        assert isinstance(info.dataset_info["splits"], dict)
+        # API returns config name as top-level key, e.g., {"plain_text": {...}}
+        # Get the first config's info
+        first_config = list(info.dataset_info.values())[0]
+        assert "splits" in first_config
+        assert isinstance(first_config["splits"], dict)
 
         # Check split structure matches what we discovered
-        splits_dict = info.dataset_info["splits"]
+        splits_dict = first_config["splits"]
         assert "train" in splits_dict
         assert "num_examples" in splits_dict["train"]
         assert splits_dict["train"]["num_examples"] > 0
@@ -91,15 +94,13 @@ class TestIntegrationSync:
         """Test getting dataset size."""
         size = self.client.get_size(TEST_DATASETS["small"])
 
-        assert hasattr(size, "dataset")
-        assert hasattr(size, "config")
-        assert hasattr(size, "split")
+        # DatasetSize model has size.size dict containing dataset/configs/splits
+        assert hasattr(size, "size")
+        assert isinstance(size.size, dict)
 
-        # Find a size entry
-        size_entries = size.model_dump().get("size", {})
-        if isinstance(size_entries, dict):
-            # Should have dataset info
-            assert "dataset" in size_entries or len(size_entries) > 0
+        # Check structure of size response
+        assert "dataset" in size.size
+        assert "configs" in size.size or "splits" in size.size
 
     def test_list_parquet_files(self):
         """Test listing parquet files."""
