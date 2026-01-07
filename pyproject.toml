@@ -21,6 +21,7 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
+    "ty",
     "pre-commit",
     "respx>=0.20.0",
 ]
@@ -60,6 +61,9 @@ python_version = "3.8"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[tool.ty.environment]
+python-version = "3.8"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
