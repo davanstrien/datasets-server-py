@@ -10,6 +10,63 @@ A Python client library for the Hugging Face Datasets Viewer API with both synch
 - 🚀 **High Performance**: Async support enables efficient concurrent operations
 - 🔐 **Authentication**: Seamless integration with Hugging Face authentication tokens
 - 📊 **Rich Data Access**: Preview datasets, search content, filter rows, and analyze statistics without downloading
+- 🤖 **CLI for Agents**: Command-line interface with JSON output, designed for AI agents and automation
+
+## Command-Line Interface
+
+The package includes a CLI (`dv`) designed for quick dataset exploration and AI agent integration:
+
+```bash
+# Check if a dataset is viewable
+$ dv is-valid fka/awesome-chatgpt-prompts
+{"viewer": true, "preview": true, "search": true, "filter": true, "statistics": true}
+
+# List available splits
+$ dv splits fka/awesome-chatgpt-prompts
+[{"dataset": "fka/awesome-chatgpt-prompts", "config": "default", "split": "train"}]
+
+# Sample random rows
+$ dv sample fka/awesome-chatgpt-prompts -n 3 -c default -s train
+{"features": [...], "rows": [...], "num_rows_total": 170, ...}
+
+# Search for content
+$ dv search fka/awesome-chatgpt-prompts "python" -c default -s train
+{"features": [...], "rows": [...], ...}
+```
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `dv is-valid <dataset>` | Check dataset validity and feature availability |
+| `dv info <dataset>` | Get dataset metadata |
+| `dv splits <dataset>` | List available configs/splits |
+| `dv size <dataset>` | Get dataset size information |
+| `dv parquet <dataset>` | List parquet file URLs (for DuckDB/pandas bulk access) |
+| `dv preview <dataset>` | Get first ~100 rows |
+| `dv sample <dataset> -n N` | Get random sample (max 100 rows) |
+| `dv search <dataset> <query>` | Search for matching rows |
+| `dv stats <dataset>` | Get column statistics |
+
+### Agent-Friendly Design
+
+The CLI outputs JSON by default, making it easy to integrate with AI agents and automation tools like [HuggingFace Skills](https://github.com/huggingface/skills):
+
+```bash
+# Pipe to jq for processing
+$ dv splits my-dataset | jq '.[0].config'
+"default"
+
+# Check exit codes (0=success, 1=error)
+$ dv is-valid nonexistent/dataset; echo "Exit: $?"
+{"error": "DatasetNotFoundError", "message": "..."}
+Exit: 1
+
+# For bulk data access, get parquet URLs and use DuckDB/pandas
+$ dv parquet my-dataset | jq '.[].url'
+```
+
+> **Note**: The Datasets Viewer API is designed for dataset exploration (previewing a few rows), not bulk data access. For heavy data processing, use `dv parquet` to get file URLs and process with DuckDB or pandas directly.
 
 ## Installation
 
