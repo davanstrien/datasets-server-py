@@ -46,7 +46,7 @@ $ dv search fka/awesome-chatgpt-prompts "python" -c default -s train
 | `dv preview <dataset>` | Get first ~100 rows |
 | `dv sample <dataset> -n N` | Get random sample (max 100 rows) |
 | `dv search <dataset> <query>` | Search for matching rows |
-| `dv stats <dataset>` | Get column statistics |
+| `dv stats <dataset> -c <config> -s <split>` | Get column statistics |
 
 ### Agent-Friendly Design
 
