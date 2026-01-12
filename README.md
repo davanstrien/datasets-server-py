@@ -50,7 +50,7 @@ $ dv search fka/awesome-chatgpt-prompts "python" -c default -s train
 
 ### Agent-Friendly Design
 
-The CLI outputs JSON by default, making it easy to integrate with AI agents and automation tools like [HuggingFace Skills](https://github.com/huggingface/skills):
+The CLI outputs JSON by default, making it easy to integrate with AI agents and automation tools like [Hugging Face Skills](https://github.com/huggingface/skills):
 
 ```bash
 # Pipe to jq for processing
