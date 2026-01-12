@@ -419,9 +419,7 @@ class DatasetsServerClient(BaseClient):
                 )
 
         if n_samples > total_rows:
-            raise ValueError(
-                f"Requested {n_samples} samples but dataset only has {total_rows} rows"
-            )
+            raise ValueError(f"Requested {n_samples} samples but dataset only has {total_rows} rows")
 
         # Set random seed if provided
         if seed is not None:
@@ -429,9 +427,7 @@ class DatasetsServerClient(BaseClient):
 
         # If max_requests is specified, use request-limited sampling
         if max_requests is not None and max_requests > 0:
-            return self._sample_rows_limited(
-                dataset, config, split, n_samples, total_rows, max_requests
-            )
+            return self._sample_rows_limited(dataset, config, split, n_samples, total_rows, max_requests)
 
         # Otherwise, use true random sampling
         indices = sorted(random.sample(range(total_rows), n_samples))

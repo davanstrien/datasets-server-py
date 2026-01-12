@@ -26,8 +26,8 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
         os.getenv("INTEGRATION_TESTS", "0") != "1",
-        reason="Integration tests are disabled. Set INTEGRATION_TESTS=1 to run them."
-    )
+        reason="Integration tests are disabled. Set INTEGRATION_TESTS=1 to run them.",
+    ),
 ]
 
 
@@ -152,11 +152,7 @@ class TestIntegrationSync:
 
         # Get first batch
         batch1 = self.client.get_rows(
-            dataset=split.dataset,
-            config=split.config,
-            split=split.split,
-            offset=0,
-            length=10
+            dataset=split.dataset, config=split.config, split=split.split, offset=0, length=10
         )
 
         assert len(batch1.rows) == 10
@@ -164,11 +160,7 @@ class TestIntegrationSync:
 
         # Get second batch
         batch2 = self.client.get_rows(
-            dataset=split.dataset,
-            config=split.config,
-            split=split.split,
-            offset=10,
-            length=10
+            dataset=split.dataset, config=split.config, split=split.split, offset=10, length=10
         )
 
         assert len(batch2.rows) == 10
@@ -187,11 +179,7 @@ class TestIntegrationSync:
 
         # Search for a common word
         results = self.client.search(
-            dataset=split.dataset,
-            query="movie",
-            config=split.config,
-            split=split.split,
-            length=5
+            dataset=split.dataset, query="movie", config=split.config, split=split.split, length=5
         )
 
         assert len(results.rows) > 0
@@ -212,11 +200,7 @@ class TestIntegrationSync:
 
         # Filter for positive reviews (label = 1)
         results = self.client.filter(
-            dataset=split.dataset,
-            where='"label" = 1',
-            config=split.config,
-            split=split.split,
-            length=5
+            dataset=split.dataset, where='"label" = 1', config=split.config, split=split.split, length=5
         )
 
         if len(results.rows) > 0:
@@ -233,11 +217,7 @@ class TestIntegrationSync:
         splits = self.client.list_splits(TEST_DATASETS["small"])
         split = splits[0]
 
-        stats = self.client.get_statistics(
-            dataset=split.dataset,
-            config=split.config,
-            split=split.split
-        )
+        stats = self.client.get_statistics(dataset=split.dataset, config=split.config, split=split.split)
 
         assert hasattr(stats, "num_examples")
         assert stats.num_examples > 0
@@ -249,11 +229,7 @@ class TestIntegrationSync:
 
         # Sample with seed for reproducibility
         samples = self.client.sample_rows(
-            dataset=split.dataset,
-            config=split.config,
-            split=split.split,
-            n_samples=5,
-            seed=42
+            dataset=split.dataset, config=split.config, split=split.split, n_samples=5, seed=42
         )
 
         assert len(samples.rows) == 5
@@ -271,19 +247,16 @@ class TestIntegrationSync:
 
         # Iterate through first 25 rows
         rows = []
-        for i, row in enumerate(self.client.iter_rows(
-            dataset=split.dataset,
-            config=split.config,
-            split=split.split,
-            batch_size=10
-        )):
+        for i, row in enumerate(
+            self.client.iter_rows(dataset=split.dataset, config=split.config, split=split.split, batch_size=10)
+        ):
             rows.append(row)
             if i >= 24:  # Stop after 25 rows
                 break
 
         assert len(rows) == 25
         # Verify all rows are unique
-        assert len(set(str(row) for row in rows)) == 25
+        assert len({str(row) for row in rows}) == 25
 
 
 @pytest.mark.asyncio
@@ -328,11 +301,7 @@ class TestIntegrationAsync:
 
             # Sample with seed
             samples = await client.sample_rows(
-                dataset=split.dataset,
-                config=split.config,
-                split=split.split,
-                n_samples=5,
-                seed=42
+                dataset=split.dataset, config=split.config, split=split.split, n_samples=5, seed=42
             )
 
             assert len(samples.rows) == 5
@@ -348,10 +317,7 @@ class TestIntegrationAsync:
             rows = []
             i = 0
             async for row in client.iter_rows(
-                dataset=split.dataset,
-                config=split.config,
-                split=split.split,
-                batch_size=10
+                dataset=split.dataset, config=split.config, split=split.split, batch_size=10
             ):
                 rows.append(row)
                 i += 1
@@ -373,7 +339,7 @@ class TestIntegrationEdgeCases:
         assert info.dataset_info is not None
 
         splits = client.list_splits(TEST_DATASETS["news"])
-        configs = set(s.config for s in splits)
+        configs = {s.config for s in splits}
         assert len(configs) >= 1
 
     def test_rate_limiting_behavior(self):
@@ -381,7 +347,7 @@ class TestIntegrationEdgeCases:
         client = DatasetsServerClient()
 
         # Make 10 rapid requests
-        for i in range(10):
+        for _ in range(10):
             validity = client.is_valid(TEST_DATASETS["small"])
             assert validity.viewer is True
 
@@ -409,11 +375,7 @@ class TestIntegrationEdgeCases:
         # Search with quotes and special chars
         try:
             results = client.search(
-                dataset=split.dataset,
-                query='movie "great"',
-                config=split.config,
-                split=split.split,
-                length=5
+                dataset=split.dataset, query='movie "great"', config=split.config, split=split.split, length=5
             )
             # Just verify it doesn't crash
             assert results is not None

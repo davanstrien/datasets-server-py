@@ -101,9 +101,7 @@ class AsyncDatasetsServerClient(BaseClient):
         url = f"{self.endpoint}{path}"
 
         async def _do_request() -> httpx.Response:
-            response = await self.session.request(
-                method=method, url=url, params=params, headers=self.headers
-            )
+            response = await self.session.request(method=method, url=url, params=params, headers=self.headers)
             response.raise_for_status()
             return response
 
@@ -437,9 +435,7 @@ class AsyncDatasetsServerClient(BaseClient):
                 )
 
         if n_samples > total_rows:
-            raise ValueError(
-                f"Requested {n_samples} samples but dataset only has {total_rows} rows"
-            )
+            raise ValueError(f"Requested {n_samples} samples but dataset only has {total_rows} rows")
 
         # Set random seed if provided
         if seed is not None:
@@ -447,9 +443,7 @@ class AsyncDatasetsServerClient(BaseClient):
 
         # If max_requests is specified, use request-limited sampling
         if max_requests is not None and max_requests > 0:
-            return await self._sample_rows_limited(
-                dataset, config, split, n_samples, total_rows, max_requests
-            )
+            return await self._sample_rows_limited(dataset, config, split, n_samples, total_rows, max_requests)
 
         # Otherwise, use true random sampling
         indices = sorted(random.sample(range(total_rows), n_samples))

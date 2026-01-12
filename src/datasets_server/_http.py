@@ -278,9 +278,7 @@ def http_backoff(
 
             if attempt < max_retries:
                 retry_after = _get_retry_after(e.response)
-                wait_time = _calculate_wait_time(
-                    attempt, base_wait, max_wait, retry_after
-                )
+                wait_time = _calculate_wait_time(attempt, base_wait, max_wait, retry_after)
                 logger.warning(
                     "Request failed with status %d, retrying in %.2fs (attempt %d/%d)",
                     e.response.status_code,
@@ -360,9 +358,7 @@ async def async_http_backoff(
 
             if attempt < max_retries:
                 retry_after = _get_retry_after(e.response)
-                wait_time = _calculate_wait_time(
-                    attempt, base_wait, max_wait, retry_after
-                )
+                wait_time = _calculate_wait_time(attempt, base_wait, max_wait, retry_after)
                 logger.warning(
                     "Request failed with status %d, retrying in %.2fs (attempt %d/%d)",
                     e.response.status_code,
