@@ -131,9 +131,7 @@ class TestHttpBackoff:
             nonlocal call_count
             call_count += 1
             response = httpx.Response(404)
-            raise httpx.HTTPStatusError(
-                "Not found", request=httpx.Request("GET", "http://test"), response=response
-            )
+            raise httpx.HTTPStatusError("Not found", request=httpx.Request("GET", "http://test"), response=response)
 
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
             http_backoff(not_found_func, max_retries=3)
@@ -220,9 +218,7 @@ class TestAsyncHttpBackoff:
             nonlocal call_count
             call_count += 1
             response = httpx.Response(404)
-            raise httpx.HTTPStatusError(
-                "Not found", request=httpx.Request("GET", "http://test"), response=response
-            )
+            raise httpx.HTTPStatusError("Not found", request=httpx.Request("GET", "http://test"), response=response)
 
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
             await async_http_backoff(not_found_func, max_retries=3)

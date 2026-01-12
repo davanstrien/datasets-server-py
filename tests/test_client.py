@@ -114,9 +114,7 @@ class TestDatasetsServerClient:
     @respx.mock
     def test_generic_exception(self):
         """Test handling of generic exceptions during requests."""
-        respx.get("https://datasets-server.huggingface.co/is-valid").mock(
-            side_effect=Exception("Network error")
-        )
+        respx.get("https://datasets-server.huggingface.co/is-valid").mock(side_effect=Exception("Network error"))
 
         client = DatasetsServerClient()
         with pytest.raises(DatasetServerError) as exc_info:
@@ -366,11 +364,7 @@ class TestDatasetsServerClient:
             httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 100}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 100}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -379,11 +373,7 @@ class TestDatasetsServerClient:
             httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 100}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 100}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -449,11 +439,7 @@ class TestDatasetsServerClient:
             return_value=httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 50}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 50}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -544,11 +530,7 @@ class TestDatasetsServerClient:
             return_value=httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 10000}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 10000}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -590,11 +572,7 @@ class TestDatasetsServerClient:
             return_value=httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 50000}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 50000}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -607,10 +585,7 @@ class TestDatasetsServerClient:
                 200,
                 json={
                     "features": [{"name": "text", "type": "string"}, {"name": "label", "type": "int"}],
-                    "rows": [
-                        {"row": {"text": f"Row {i}", "label": i % 2}}
-                        for i in range(15000, 15100)
-                    ],
+                    "rows": [{"row": {"text": f"Row {i}", "label": i % 2}} for i in range(15000, 15100)],
                     "num_rows_total": 50000,
                 },
             )
@@ -632,11 +607,7 @@ class TestDatasetsServerClient:
             return_value=httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 1000}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 1000}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,

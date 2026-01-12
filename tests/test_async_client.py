@@ -242,9 +242,7 @@ class TestAsyncDatasetsServerClient:
     @respx.mock
     async def test_generic_exception(self):
         """Test handling of generic exceptions during requests."""
-        respx.get("https://datasets-server.huggingface.co/is-valid").mock(
-            side_effect=Exception("Network error")
-        )
+        respx.get("https://datasets-server.huggingface.co/is-valid").mock(side_effect=Exception("Network error"))
 
         async with AsyncDatasetsServerClient() as client:
             with pytest.raises(DatasetServerError) as exc_info:
@@ -378,11 +376,7 @@ class TestAsyncDatasetsServerClient:
             httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 100}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 100}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -391,11 +385,7 @@ class TestAsyncDatasetsServerClient:
             httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 100}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 100}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -462,11 +452,7 @@ class TestAsyncDatasetsServerClient:
             return_value=httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 50}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 50}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -558,11 +544,7 @@ class TestAsyncDatasetsServerClient:
             return_value=httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 10000}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 10000}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -605,11 +587,7 @@ class TestAsyncDatasetsServerClient:
             return_value=httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 50000}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 50000}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -622,10 +600,7 @@ class TestAsyncDatasetsServerClient:
                 200,
                 json={
                     "features": [{"name": "text", "type": "string"}, {"name": "label", "type": "int"}],
-                    "rows": [
-                        {"row": {"text": f"Row {i}", "label": i % 2}}
-                        for i in range(15000, 15100)
-                    ],
+                    "rows": [{"row": {"text": f"Row {i}", "label": i % 2}} for i in range(15000, 15100)],
                     "num_rows_total": 50000,
                 },
             )
@@ -645,11 +620,7 @@ class TestAsyncDatasetsServerClient:
             return_value=httpx.Response(
                 200,
                 json={
-                    "dataset_info": {
-                        "splits": {
-                            "train": {"name": "train", "num_examples": 100000}
-                        }
-                    },
+                    "dataset_info": {"splits": {"train": {"name": "train", "num_examples": 100000}}},
                     "pending": [],
                     "failed": [],
                     "partial": False,
@@ -664,10 +635,7 @@ class TestAsyncDatasetsServerClient:
                 200,
                 json={
                     "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
-                    "rows": [
-                        {"row": {"text": f"Row {i}", "id": i}}
-                        for i in range(100)
-                    ],
+                    "rows": [{"row": {"text": f"Row {i}", "id": i}} for i in range(100)],
                     "num_rows_total": 100000,
                 },
             ),
@@ -675,10 +643,7 @@ class TestAsyncDatasetsServerClient:
                 200,
                 json={
                     "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
-                    "rows": [
-                        {"row": {"text": f"Row {i}", "id": i}}
-                        for i in range(100)
-                    ],
+                    "rows": [{"row": {"text": f"Row {i}", "id": i}} for i in range(100)],
                     "num_rows_total": 100000,
                 },
             ),
@@ -686,10 +651,7 @@ class TestAsyncDatasetsServerClient:
                 200,
                 json={
                     "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
-                    "rows": [
-                        {"row": {"text": f"Row {i}", "id": i}}
-                        for i in range(100)
-                    ],
+                    "rows": [{"row": {"text": f"Row {i}", "id": i}} for i in range(100)],
                     "num_rows_total": 100000,
                 },
             ),
@@ -697,10 +659,7 @@ class TestAsyncDatasetsServerClient:
                 200,
                 json={
                     "features": [{"name": "text", "type": "string"}, {"name": "id", "type": "int"}],
-                    "rows": [
-                        {"row": {"text": f"Row {i}", "id": i}}
-                        for i in range(100)
-                    ],
+                    "rows": [{"row": {"text": f"Row {i}", "id": i}} for i in range(100)],
                     "num_rows_total": 100000,
                 },
             ),
